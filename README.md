@@ -544,4 +544,196 @@ public Department GetDepartmentInfo(int id, bool includeEmployees = false)
 ```
 
 ---
-*Next section will cover Lazy Loading patterns and their implementation.*
+# Entity Framework Core - Lazy Loading
+
+## Table of Contents
+- [Introduction](#introduction)
+- [Lazy Loading Concept](#lazy-loading-concept)
+- [Implementation](#implementation)
+- [Comparison with Other Patterns](#comparison-with-other-patterns)
+- [Real-World Example: SPA Architecture](#real-world-example-spa-architecture)
+- [Configuration and Setup](#configuration-and-setup)
+
+## Introduction
+
+Lazy loading is a design pattern where the loading of related data is deferred until it's actually needed. It's part of a broader software engineering concept used in various contexts, from database access to web applications.
+
+## Lazy Loading Concept
+
+```mermaid
+graph TD
+    A[Initial Request] --> B[Load Main Entity]
+    B --> C{Access Related Data?}
+    C -->|Yes| D[Automatic Load Related Data]
+    C -->|No| E[No Additional Loading]
+    D --> F[Additional Database Query]
+```
+
+### Core Principles
+1. Load data only when needed
+2. Implicit loading (automatic)
+3. On-demand database queries
+4. Multiple database roundtrips
+
+## Implementation
+
+### 1. Package Installation
+```xml
+<PackageReference Include="Microsoft.EntityFrameworkCore.Proxies" Version="6.0.0" />
+```
+
+### 2. DbContext Configuration
+```csharp
+protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+{
+    optionsBuilder
+        .UseLazyLoadingProxies()
+        .UseSqlServer("your_connection_string");
+}
+```
+
+### 3. Model Requirements
+```csharp
+public class Employee
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    // Must be virtual for lazy loading
+    public virtual Department Department { get; set; }
+}
+
+public class Department
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    // Must be virtual for lazy loading
+    public virtual ICollection<Employee> Employees { get; set; }
+}
+```
+
+### Usage Example
+```csharp
+// No explicit loading required
+var employee = (from E in dbContext.Employees
+               where E.Id == 1
+               select E).FirstOrDefault();
+
+// Department loads automatically when accessed
+Console.WriteLine($"Employee: {employee?.Name}, Department: {employee?.Department?.Name}");
+
+var department = (from D in dbContext.Departments
+                 where D.Id == 10
+                 select D).FirstOrDefault();
+
+// Employees load automatically when accessed
+foreach(var emp in department.Employees)
+{
+    Console.WriteLine($"Employee: Id = {emp.Id}, Name = {emp.Name}");
+}
+```
+
+## Comparison with Other Patterns
+
+| Feature | Lazy Loading | Explicit Loading | Eager Loading |
+|---------|--------------|------------------|---------------|
+| Loading Time | On demand | On demand | Immediate |
+| Control | Implicit | Explicit | Explicit |
+| Code Complexity | Low | Medium | Low |
+| Performance Impact | Multiple queries | Multiple queries | Single query |
+| Memory Usage | Initially low | Initially low | Initially high |
+| Database Trips | Multiple | Multiple | Single |
+| Best Use Case | Unknown needs | Controlled loading | Known needs |
+
+## Real-World Example: SPA Architecture
+
+Similar to how modern SPAs work:
+
+```mermaid
+graph LR
+    A[SPA Initial Load] --> B[Core Modules]
+    B --> C[Home Page]
+    B --> D[Navbar]
+    B --> E[Footer]
+    F[Additional Modules] --> G[Products]
+    F --> H[Payment]
+    F --> I[Security]
+    G -->|Load on Demand| B
+    H -->|Load on Demand| B
+    I -->|Load on Demand| B
+```
+
+### Parallels with EF Core Lazy Loading
+1. Initial load contains essential data
+2. Additional data loaded on demand
+3. Reduces initial load time
+4. Optimizes resource usage
+
+## Configuration and Setup
+
+### Required Steps
+1. Install Proxies Package
+2. Configure DbContext
+3. Make entities public
+4. Make navigation properties virtual
+
+### Best Practices
+1. **Mixed Approach**
+   ```csharp
+   // Enable lazy loading globally
+   optionsBuilder.UseLazyLoadingProxies();
+   
+   // Use eager loading when needed
+   var query = dbContext.Employees.Include(e => e.Department);
+   ```
+
+2. **Performance Considerations**
+   - Monitor query execution
+   - Watch for N+1 query problems
+   - Use eager loading for known relationships
+
+3. **Memory Management**
+   ```csharp
+   using (var context = new AppDbContext())
+   {
+       var employee = context.Employees.Find(1);
+       // Access related data within context lifecycle
+   }
+   ```
+
+## Trade-offs
+
+### Advantages
+- Flexible loading
+- Reduced initial load
+- Automatic loading
+- Simple to use
+
+### Disadvantages
+- Multiple database trips
+- Potential performance impact
+- Less explicit control
+- Proxy overhead
+
+## Recommendations
+
+1. **Enable Both Patterns**
+   ```csharp
+   // Enable lazy loading globally
+   optionsBuilder.UseLazyLoadingProxies();
+   
+   // Use selective eager loading when appropriate
+   public Employee GetEmployeeWithDepartment(int id)
+   {
+       return context.Employees
+           .Include(e => e.Department)
+           .FirstOrDefault(e => e.Id == id);
+   }
+   ```
+
+2. **Monitor Performance**
+   - Track database queries
+   - Watch for unexpected loads
+   - Profile application performance
+
+---
+
