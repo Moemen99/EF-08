@@ -90,11 +90,11 @@ Null propagation breakdown:
 
 ```mermaid
 graph LR
-    A[employee?] -->|null| B[Stop]
-    A -->|not null| C[Name]
-    A -->|not null| D[Department?]
+    A[Employee?] -->|null| B[Stop]
+    A -->|not null| C[Get Name]
+    A -->|not null| D[Get Department?]
     D -->|null| E[Return "NA"]
-    D -->|not null| F[Name]
+    D -->|not null| F[Get Department Name]
 ```
 
 ## Loading Strategies Overview
