@@ -240,4 +240,138 @@ WHERE [d].[Id] = @DepartmentId
 - Be careful with loops that load related data (N+1 query problem)
 
 ---
-*Next section will cover Eager Loading patterns and their implementation.*
+
+
+
+# Entity Framework Core Loading Patterns - Eager Loading
+
+## Table of Contents
+- [Introduction to Eager Loading](#introduction-to-eager-loading)
+- [Implementation](#implementation)
+- [Generated SQL](#generated-sql)
+- [Multiple Related Entities](#multiple-related-entities)
+- [Pros and Cons](#pros-and-cons)
+- [Advanced Scenarios](#advanced-scenarios)
+
+## Introduction to Eager Loading
+
+Eager loading is a pattern where related data is loaded along with the main entity in the same database query. This is achieved using the `Include` method, which generates a JOIN in the resulting SQL query.
+
+```mermaid
+graph TD
+    A[Single Database Query] --> B[Main Entity Data]
+    A --> C[Related Entity Data]
+    B --> D[Employee Properties]
+    C --> E[Department Properties]
+```
+
+## Implementation
+
+Basic eager loading syntax:
+
+```csharp
+var employee = (from E in dbContext.Employees
+                        .Include(E => E.Department)
+               where E.Id == 1
+               select E).FirstOrDefault();
+
+Console.WriteLine($"Employee: {employee?.Name}, Department: {employee?.Department?.Name ?? "NA"}");
+```
+
+Generated SQL:
+```sql
+SELECT TOP(1) [e].[Id], [e].[Address], [e].[Age], [e].[DepartmentId], 
+              [e].[Name], [e].[Salary], [d].[Id], [d].[Name]
+FROM [Employees] AS [e]
+LEFT JOIN [Departments] AS [d] ON [e].[DepartmentId] = [d].[Id]
+WHERE [e].[Id] = 1
+```
+
+## Multiple Related Entities
+
+You can chain multiple includes for nested relationships:
+
+```csharp
+var employee = dbContext.Employees
+    .Include(E => E.Department)
+    .Include(E => E.Project)
+    .FirstOrDefault(e => e.Id == 1);
+```
+
+For nested related data, use ThenInclude:
+```csharp
+dbContext.Employees
+    .Include(e => e.Department)
+    .ThenInclude(d => d.Test)
+```
+
+## Pros and Cons
+
+| Aspect | Description |
+|--------|-------------|
+| Pros | - Single database query<br>- Reduces round trips to database<br>- Simpler code than explicit loading |
+| Cons | - Always loads related data<br>- Can retrieve unnecessary data<br>- May impact memory usage<br>- Less granular control |
+
+## Advanced Scenarios
+
+### Specification Pattern Integration
+
+Eager loading works well with the Specification pattern for dynamic query building:
+
+```csharp
+public class Specification<T>
+{
+    private List<Expression<Func<T, object>>> includes = new();
+    
+    public void AddInclude(Expression<Func<T, object>> includeExpression)
+    {
+        includes.Add(includeExpression);
+    }
+    
+    public IQueryable<T> ApplyIncludes(IQueryable<T> query)
+    {
+        return includes.Aggregate(query, (current, include) => 
+            current.Include(include));
+    }
+}
+```
+
+### Best Practices
+
+1. **Consider Usage Patterns**
+   - Use eager loading when you know you'll need the related data
+   - Avoid when related data is only occasionally needed
+
+2. **Performance Optimization**
+   - Be mindful of the amount of data being loaded
+   - Consider projection (SELECT) when you need only specific properties
+
+3. **Query Design**
+   ```csharp
+   // Good: When you always need department data
+   public Employee GetEmployeeWithDepartment(int id)
+   {
+       return dbContext.Employees
+           .Include(e => e.Department)
+           .FirstOrDefault(e => e.Id == id);
+   }
+
+   // Good: When department data is optional
+   public Employee GetEmployee(int id, bool includeDepartment = false)
+   {
+       var query = dbContext.Employees.AsQueryable();
+       if (includeDepartment)
+           query = query.Include(e => e.Department);
+       return query.FirstOrDefault(e => e.Id == id);
+   }
+   ```
+
+## Key Points
+- Eager loading loads related data in a single query
+- Uses LEFT JOIN to include related entities
+- Suitable for predictable data access patterns
+- Can be chained for multiple relationships
+- Works well with specification pattern for dynamic queries
+
+---
+*Next section will cover Lazy Loading patterns and their implementation.*
