@@ -89,12 +89,12 @@ Null propagation breakdown:
 3. `?? "NA"` - Provide default value if null
 
 ```mermaid
-graph LR
-    A[Employee?] -->|null| B[Stop]
-    A -->|not null| C[Get Name]
-    A -->|not null| D[Get Department?]
-    D -->|null| E[Return "NA"]
-    D -->|not null| F[Get Department Name]
+flowchart LR
+    A["Check Employee"] -->|is null| B["Return null"]
+    A -->|not null| C["Get Name"]
+    A -->|not null| D["Check Department"]
+    D -->|is null| E["Return 'NA'"]
+    D -->|not null| F["Get Department Name"]
 ```
 
 ## Loading Strategies Overview
