@@ -374,4 +374,174 @@ public class Specification<T>
 - Works well with specification pattern for dynamic queries
 
 ---
+
+
+
+
+# Entity Framework Core - Eager Loading Collections
+
+## Table of Contents
+- [Collection Eager Loading](#collection-eager-loading)
+- [Generated SQL Analysis](#generated-sql-analysis)
+- [Performance Implications](#performance-implications)
+- [Best Practices](#best-practices)
+
+## Collection Eager Loading
+
+Loading a department with its collection of employees:
+
+```csharp
+var department = (from D in dbContext.Departments
+                         .Include(D => D.Employees)
+                 where D.Id == 10
+                 select D).FirstOrDefault();
+
+Console.WriteLine($"Department: Id = {department?.Id}, Name = {department?.Name}");
+
+foreach(var emp in department.Employees)
+{
+    Console.WriteLine($"Employee: Id = {emp?.Id}, Name = {emp?.Name}");
+}
+```
+
+## Generated SQL Analysis
+
+```sql
+SELECT [t].[Id], [t].[DateOfCreation], [t].[Name], [e].[Id], [e].[Address], 
+       [e].[Age], [e].[DepartmentId], [e].[Name]
+FROM (
+    SELECT TOP(1) [d].[Id], [d].[DateOfCreation], [d].[Name]
+    FROM [Departments] AS [d]
+    WHERE [d].[Id] = 10
+) AS [t]
+LEFT JOIN [Employees] AS [e] ON [t].[Id] = [e].[DepartmentId]
+ORDER BY [t].[Id]
+```
+
+```mermaid
+graph TD
+    A[Department Query] --> B[Subquery: Get Department]
+    B --> C[LEFT JOIN with Employees]
+    C --> D[Return Combined Results]
+    D --> E[Large Result Set]
+    E -->|Performance Impact| F[Memory Usage]
+    E -->|Performance Impact| G[Network Traffic]
+```
+
+## Performance Implications
+
+### Potential Issues
+1. **Unnecessary Data Loading**
+   - All employees are loaded even if not needed
+   - Memory impact with large employee collections
+   - Network bandwidth consumption
+
+2. **Subquery Generation**
+   - Generated SQL uses a subquery for department
+   - Additional complexity in query execution
+   - May impact performance for large datasets
+
+3. **Resource Usage**
+   ```mermaid
+   graph LR
+       A[Query Execution] --> B[Memory Usage]
+       A --> C[Network Bandwidth]
+       A --> D[Database Load]
+       B -->|Impact| E[Application Performance]
+       C -->|Impact| E
+       D -->|Impact| E
+   ```
+
+## Best Practices
+
+### 1. Selective Loading Pattern
+```csharp
+public Department GetDepartment(int id, bool includeEmployees = false)
+{
+    var query = dbContext.Departments.AsQueryable();
+    
+    if (includeEmployees)
+    {
+        query = query.Include(d => d.Employees);
+    }
+    
+    return query.FirstOrDefault(d => d.Id == id);
+}
+```
+
+### 2. Data Transfer Objects (DTOs)
+```csharp
+public class DepartmentBasicDTO
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public DateTime DateOfCreation { get; set; }
+}
+
+public class DepartmentWithEmployeesDTO : DepartmentBasicDTO
+{
+    public ICollection<EmployeeDTO> Employees { get; set; }
+}
+```
+
+### 3. Projection for Specific Needs
+```csharp
+var departmentInfo = dbContext.Departments
+    .Where(d => d.Id == 10)
+    .Select(d => new DepartmentBasicDTO
+    {
+        Id = d.Id,
+        Name = d.Name,
+        DateOfCreation = d.DateOfCreation
+    })
+    .FirstOrDefault();
+```
+
+## Recommendations
+
+1. **Consider Data Volume**
+   - Evaluate number of related records
+   - Assess memory requirements
+   - Monitor network impact
+
+2. **Query Design**
+   - Use selective loading when possible
+   - Implement DTOs for specific use cases
+   - Consider projections for large datasets
+
+3. **Performance Optimization**
+   - Monitor query execution plans
+   - Use filtering before Including
+   - Consider pagination for large collections
+
+## Code Examples
+
+### Bad Practice
+```csharp
+// Always loading employees regardless of need
+public Department GetDepartmentInfo(int id)
+{
+    return dbContext.Departments
+        .Include(d => d.Employees)
+        .FirstOrDefault(d => d.Id == id);
+}
+```
+
+### Good Practice
+```csharp
+// Flexible loading based on needs
+public Department GetDepartmentInfo(int id, bool includeEmployees = false)
+{
+    var query = dbContext.Departments.AsQueryable();
+    
+    if (includeEmployees)
+    {
+        query = query.Include(d => d.Employees);
+    }
+    
+    return query.FirstOrDefault(d => d.Id == id);
+}
+```
+
+---
 *Next section will cover Lazy Loading patterns and their implementation.*
