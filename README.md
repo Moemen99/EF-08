@@ -29,16 +29,16 @@ Example properties loaded by default for Employee:
 - Department (navigation property) → NULL
 
 ```mermaid
-graph TD
-    A[Query Employee] --> B[Basic Properties Loaded]
-    A --> C[Navigation Properties]
-    B --> D[Id]
-    B --> E[Name]
-    B --> F[Age]
-    B --> G[Salary]
-    B --> H[Address]
-    B --> I[DepartmentId]
-    C -->|Not Loaded| J[Department NULL]
+flowchart TD
+    A["Query Employee"] --> B["Load Basic Properties"]
+    A --> C["Navigation Properties"]
+    B --> D["Id"]
+    B --> E["Name"]
+    B --> F["Age"]
+    B --> G["Salary"]
+    B --> H["Address"]
+    B --> I["DepartmentId"]
+    C -->|Not Loaded by Default| J["Department = null"]
 ```
 
 ## Basic Query Structure
