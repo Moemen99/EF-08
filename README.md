@@ -113,4 +113,131 @@ Each strategy has its use cases and performance implications.
 | Lazy Loading | When accessed | Uncertain data needs |
 
 ---
-*More sections will be added for each loading strategy with detailed examples.*
+
+
+
+# Entity Framework Core Loading Patterns
+
+## Table of Contents
+- [Default Behavior Review](#default-behavior-review)
+- [Explicit Loading](#explicit-loading)
+  - [Single Reference Loading](#single-reference-loading)
+  - [Collection Loading](#collection-loading)
+  - [Generated SQL Queries](#generated-sql-queries)
+  - [Pros and Cons](#pros-and-cons)
+
+## Default Behavior Review
+
+When querying entities, EF Core generates simple SELECT statements without JOINs:
+
+```sql
+-- For Employee query
+SELECT TOP(1) [e].[Id], [e].[Address], [e].[Age], [e].[DepartmentId], [e].[Name], [e].[Salary]
+FROM [Employees] AS [e]
+WHERE [e].[Id] = 1
+
+-- For Department query
+SELECT TOP(1) [d].[Id], [d].[DateOfCreation], [d].[Name]
+FROM [Departments] AS [d]
+WHERE [d].[Id] = 10
+```
+
+```csharp
+var employee = (from E in dbContext.Employees
+                where E.Id == 1
+                select E).FirstOrDefault();
+
+// Department navigation property will be null
+Console.WriteLine($"Employee: {employee?.Name}, Department:{employee?.Department?.Name ?? "NA"}");
+```
+
+## Explicit Loading
+
+Explicit loading allows you to load related data on demand after loading the main entity.
+
+### Single Reference Loading
+
+Loading a single reference (Employee → Department):
+
+```csharp
+// First load employee
+var employee = (from E in dbContext.Employees
+                where E.Id == 1
+                select E).FirstOrDefault();
+
+// Explicitly load department - Two syntax options
+dbContext.Entry(employee).Reference(E => E.Department).Load();
+// OR
+dbContext.Entry(employee).Reference(nameof(Employee.Department)).Load();
+
+// Now department data is available
+Console.WriteLine($"Employee: {employee?.Name}, Department: {employee?.Department?.Name ?? "NA"}");
+```
+
+### Collection Loading
+
+Loading a collection (Department → Employees):
+
+```csharp
+// First load department
+var department = (from D in dbContext.Departments
+                 where D.Id == 10
+                 select D).FirstOrDefault();
+
+Console.WriteLine($"Department: Id = {department?.Id}, Name = {department?.Name}");
+
+// Explicitly load employees collection
+dbContext.Entry(department).Collection(D => D.Employees).Load();
+
+// Now we can iterate through employees
+foreach(var emp in department.Employees)
+{
+    Console.WriteLine($"Employee: Id = {emp.Id}, Name = {emp?.Name}");
+}
+```
+
+### Generated SQL Queries
+
+```mermaid
+sequenceDiagram
+    Application->>Database: Request 1 (Main Entity)
+    Note over Application,Database: SELECT FROM Employees/Departments
+    Database-->>Application: Return Main Entity
+    Application->>Database: Request 2 (Related Data)
+    Note over Application,Database: SELECT Related Data
+    Database-->>Application: Return Related Data
+```
+
+For employee with department:
+```sql
+-- First Request
+SELECT TOP(1) [e].[Id], [e].[Address], [e].[Age], [e].[DepartmentId], [e].[Name], [e].[Salary]
+FROM [Employees] AS [e]
+WHERE [e].[Id] = 1
+
+-- Second Request (after explicit load)
+SELECT [d].[Id], [d].[DateOfCreation], [d].[Name]
+FROM [Departments] AS [d]
+WHERE [d].[Id] = @DepartmentId
+```
+
+### Pros and Cons
+
+| Aspect | Description |
+|--------|-------------|
+| Pros | - Load data only when needed<br>- Better memory usage for unused relations<br>- Fine-grained control over loading |
+| Cons | - Multiple database roundtrips<br>- Need to explicitly request each related entity<br>- Can lead to N+1 query problem if not careful |
+
+### Best Use Cases
+1. When related data is optional
+2. When you need fine-grained control over loading
+3. When you want to reduce initial query complexity
+4. When memory optimization is important
+
+### Performance Considerations
+- Each `.Load()` call generates a separate database query
+- Consider using eager loading if you know you'll need the related data
+- Be careful with loops that load related data (N+1 query problem)
+
+---
+*Next section will cover Eager Loading patterns and their implementation.*
