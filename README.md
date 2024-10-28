@@ -737,3 +737,199 @@ graph LR
 
 ---
 
+
+
+
+
+# Choosing Between Eager and Lazy Loading in EF Core
+
+## Table of Contents
+- [Default Behavior](#default-behavior)
+- [Relationship Types](#relationship-types)
+- [Decision Framework](#decision-framework)
+- [Business Cases](#business-cases)
+- [Implementation Guidelines](#implementation-guidelines)
+
+## Default Behavior
+
+```mermaid
+graph TD
+    A[EF Core Default] -->|No Related Data Loaded| B[Enable Lazy Loading]
+    B --> C{Choose Loading Pattern}
+    C -->|One-to-One| D[Eager Loading]
+    C -->|One-to-Many| E[Depends on Association Type]
+    E --> F{Association Type}
+    F -->|Composition| G[Eager Loading]
+    F -->|Aggregation| H[Lazy Loading]
+```
+
+## Relationship Types
+
+### Association Types
+1. **Composition (Required)**
+   - Strong relationship
+   - Child cannot exist without parent
+   - Example: Order and OrderItems
+
+2. **Aggregation (Optional)**
+   - Weak relationship
+   - Independent existence
+   - Example: Department and Employees
+
+```mermaid
+classDiagram
+    class Order {
+        +int Id
+        +DateTime Date
+        +OrderItems[] Items
+    }
+    class OrderItems {
+        +int Id
+        +int OrderId
+        +string Product
+    }
+    class Department {
+        +int Id
+        +string Name
+        +Employee[] Employees
+    }
+    class Employee {
+        +int Id
+        +string Name
+    }
+    Order "1" --* "many" OrderItems : Composition
+    Department "1" --o "many" Employee : Aggregation
+```
+
+## Decision Framework
+
+| Relationship Type | Association Type | Loading Pattern | Rationale |
+|------------------|------------------|-----------------|----------|
+| One-to-One | Any | Eager Loading | Single record, minimal overhead |
+| One-to-Many | Composition | Eager Loading | Data integrity requirement |
+| One-to-Many | Aggregation | Lazy Loading | Optional relationship |
+
+### Loading Pattern Decision Tree
+```mermaid
+flowchart TD
+    A[Start] --> B{Relationship Type}
+    B -->|One-to-One| C[Use Eager Loading]
+    B -->|One-to-Many| D{Association Type}
+    D -->|Composition| E[Use Eager Loading]
+    D -->|Aggregation| F[Use Lazy Loading]
+    E -->|Example| G[Order-OrderItems]
+    F -->|Example| H[Department-Employees]
+```
+
+## Business Cases
+
+### Case 1: Order Management
+```csharp
+// Composition relationship - Use eager loading
+public Order GetOrder(int orderId)
+{
+    return dbContext.Orders
+        .Include(o => o.OrderItems)  // Eager loading
+        .FirstOrDefault(o => o.Id == orderId);
+}
+```
+
+### Case 2: Department Management
+```csharp
+// Aggregation relationship - Use lazy loading
+public Department GetDepartment(int departmentId)
+{
+    return dbContext.Departments
+        .FirstOrDefault(d => d.Id == departmentId);
+    // Employees will load on demand when accessed
+}
+```
+
+## Implementation Guidelines
+
+### 1. Enable Lazy Loading
+```csharp
+protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+{
+    optionsBuilder
+        .UseLazyLoadingProxies()
+        .UseSqlServer(connectionString);
+}
+```
+
+### 2. Choose Pattern Based on Relationship
+
+#### Eager Loading (Composition)
+```csharp
+// Order-OrderItems: Always load together
+public class Order
+{
+    public int Id { get; set; }
+    public virtual ICollection<OrderItem> OrderItems { get; set; }
+}
+
+// Query
+var order = dbContext.Orders
+    .Include(o => o.OrderItems)
+    .FirstOrDefault(o => o.Id == 1);
+```
+
+#### Lazy Loading (Aggregation)
+```csharp
+// Department-Employees: Load on demand
+public class Department
+{
+    public int Id { get; set; }
+    public virtual ICollection<Employee> Employees { get; set; }
+}
+
+// Query
+var department = dbContext.Departments
+    .FirstOrDefault(d => d.Id == 1);
+// Employees load only when accessed
+foreach(var emp in department.Employees) { }
+```
+
+## Best Practices
+
+1. **Required Relationships (Composition)**
+   - Always use eager loading
+   - Example: Orders and OrderItems
+   - Ensures data consistency
+   - Single database trip
+
+2. **Optional Relationships (Aggregation)**
+   - Use lazy loading
+   - Example: Department and Employees
+   - Better performance when related data isn't always needed
+   - Reduces unnecessary data loading
+
+3. **Performance Considerations**
+   ```csharp
+   // Good: Composition relationship
+   public Order GetOrderWithItems(int orderId)
+   {
+       return dbContext.Orders
+           .Include(o => o.OrderItems)
+           .FirstOrDefault(o => o.Id == orderId);
+   }
+
+   // Good: Aggregation relationship
+   public Department GetDepartment(int departmentId)
+   {
+       return dbContext.Departments
+           .FirstOrDefault(d => d.Id == departmentId);
+   }
+   ```
+
+## Summary
+- Enable lazy loading globally
+- Use eager loading for:
+  - One-to-One relationships
+  - Composition relationships (required)
+- Use lazy loading for:
+  - Aggregation relationships (optional)
+  - Large collections that aren't always needed
+
+---
+*Next section: Advanced Scenarios and Performance Optimization*
